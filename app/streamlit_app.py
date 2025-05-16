@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import date
-from main import identify, add_observation, get_observations, ask_question
+from app.app_controller import identify, add_observation, get_observations, ask_question
 
 st.title("🦋 BioScout: Islamabad Biodiversity Explorer")
 

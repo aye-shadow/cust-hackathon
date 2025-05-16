@@ -1,10 +1,15 @@
 import requests
 import json
 import datetime
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
-# === FUNCTION ===
-def identify_species(image_path, lat, lng, token="eyJhbGciOiJIUzUxMiJ9.eyJ1c2VyX2lkIjo5MzE0MTIyLCJleHAiOjE3NDc0ODQyNTZ9.0cYG5VomOSPg9cF5rXTm2Uq-cDZAkvUuaVMXJPFBmI0vdD7Iga6ODZ3Z0c5xXJTIEh4rjAHBaE8Ra0looR-AkA"):
+def identify_species(image_path, lat, lng, token=None):
+    if token is None:
+        token = os.getenv("INATURALIST_TOKEN")
+
     url = "https://api.inaturalist.org/v1/computervision/score_image"
     
     # Prepare request

@@ -2,7 +2,7 @@ from sqlalchemy import Date
 import os
 import shutil
 from rag import RAGSystem
-from identify import identify_species
+from app.inaturalist_api import identify_species
 from models import Observation, SessionLocal
 
 # Create temp directory if it doesn't exist
