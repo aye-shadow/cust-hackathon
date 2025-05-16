@@ -35,3 +35,7 @@ Conservation Status:
 - Habitat fragmentation is a major concern
 - Human-wildlife conflict needs careful management
 - Several conservation programs are active in the area 
+
+Recent Sighting (2025-05-17 02:15:08):
+- Celebes Crested Macaque (species)
+  Location: Coordinates: 33.79398504493932, 73.12088012695314
