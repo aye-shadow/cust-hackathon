@@ -4,17 +4,19 @@ from identify import identify_species
 from db import SessionLocal
 from models import Observation
 from rag import RAGSystem
+from sightings_manager import SightingsManager
 import shutil
 import os
-from datetime import date
+from datetime import date, datetime
 
 app = FastAPI()
 
 # Create temp directory if it doesn't exist
 os.makedirs("temp", exist_ok=True)
 
-# Initialize RAG system
+# Initialize RAG system and SightingsManager
 rag_system = RAGSystem()
+sightings_manager = SightingsManager()
 
 # Allow frontend to connect
 app.add_middleware(
@@ -26,23 +28,24 @@ app.add_middleware(
 
 @app.post("/identify/")
 async def identify(image: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
+    file_path = None
     try:
         file_path = f"temp/{image.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
 
         suggestions = identify_species(file_path, lat, lng)
-        
-        # Clean up the temp file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            
         return suggestions
     except Exception as e:
-        # Clean up the temp file if it exists
-        if 'file_path' in locals() and os.path.exists(file_path):
-            os.remove(file_path)
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up: ensure file handle is closed and file is deleted
+        try:
+            image.file.close()
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"Warning: Could not clean up file {file_path}: {str(e)}")
 
 @app.post("/ask/")
 async def ask_question(question: str = Form(...)):
@@ -72,24 +75,62 @@ async def add_observation(
     latitude: float = Form(...),
     longitude: float = Form(...),
     notes: str = Form(""),
+    image: UploadFile = File(None)
 ):
-    session = SessionLocal()
-    obs = Observation(
-        species_name=species_name,
-        common_name=common_name,
-        date_observed=date_observed,
-        latitude=latitude,
-        longitude=longitude,
-        notes=notes
-    )
-    session.add(obs)
-    session.commit()
-    session.close()
-    return {"status": "success"}
+    try:
+        # Save to database
+        session = SessionLocal()
+        try:
+            obs = Observation(
+                species_name=species_name,
+                common_name=common_name,
+                date_observed=date_observed,
+                latitude=latitude,
+                longitude=longitude,
+                notes=notes
+            )
+            session.add(obs)
+            session.commit()
+        finally:
+            session.close()
+
+        # Save to sightings system
+        if image:
+            result = await sightings_manager.save_sighting(
+                species_name=species_name,
+                common_name=common_name,
+                latitude=latitude,
+                longitude=longitude,
+                notes=notes,
+                image_file=image,
+                location_description=f"Coordinates: {latitude}, {longitude}"
+            )
+            if not result:
+                raise HTTPException(status_code=500, detail="Failed to save sighting")
+
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/observations/")
 def get_observations():
     session = SessionLocal()
-    data = session.query(Observation).all()
-    session.close()
-    return data
+    try:
+        data = session.query(Observation).all()
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        session.close()
+
+@app.get("/recent-sightings/{species_type}")
+def get_recent_sightings(species_type: str, limit: int = 5):
+    """Get recent sightings for birds, mammals, or plants."""
+    try:
+        if species_type not in ["birds", "mammals", "plants", "other"]:
+            raise HTTPException(status_code=400, detail="Invalid species type")
+        
+        sightings = sightings_manager.get_recent_sightings(species_type, limit)
+        return sightings
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
