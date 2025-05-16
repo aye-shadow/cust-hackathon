@@ -1,0 +1,14 @@
+fastapi==0.104.1
+python-multipart==0.0.6
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+requests==2.32.3
+python-dotenv==1.0.0
+langchain==0.1.5
+langchain-groq==0.0.4
+groq==0.4.2
+chromadb==0.5.23
+sentence-transformers==2.6.0
+python-jose==3.3.0
+passlib==1.7.4
+langsmith==0.1.125 
