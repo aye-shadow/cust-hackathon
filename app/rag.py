@@ -1,26 +1,35 @@
 import os
 from typing import List, Dict
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import TextLoader
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.document_loaders import TextLoader
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain_groq import ChatGroq
+from dotenv import load_dotenv
+from langchain_community.vectorstores.supabase import SupabaseVectorStore
+from supabase import create_client
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+load_dotenv()
 
 class RAGSystem:
     def __init__(self, knowledge_dir: str = None):
+        self.knowledge_dir = knowledge_dir or "data"
+        
+        # Load GROQ_API_KEY from environment
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable not set. Please check your .env file.")
         # Set GROQ_API_KEY in environment
-        os.environ["GROQ_API_KEY"] = "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"
+        os.environ["GROQ_API_KEY"] = groq_api_key
 
-        # Set up paths
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.knowledge_dir = knowledge_dir or os.path.join(self.base_dir, "data")
-        self.chroma_dir = os.path.join(self.base_dir, "backend", "chroma_db")
+        # Supabase credentials from environment
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+        if not self.supabase_url or not self.supabase_key:
+            raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in .env")
 
-        # Create directories if they don't exist
-        os.makedirs(self.knowledge_dir, exist_ok=True)
-        os.makedirs(self.chroma_dir, exist_ok=True)
+        self.supabase_client = create_client(self.supabase_url, self.supabase_key)
 
         self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -51,11 +60,12 @@ class RAGSystem:
         # Split documents into chunks
         texts = self.text_splitter.split_documents(documents)
 
-        # Create vector store
-        self.vector_store = Chroma.from_documents(
+        # Use SupabaseVectorStore instead of Chroma
+        self.vector_store = SupabaseVectorStore.from_documents(
             documents=texts,
             embedding=self.embeddings,
-            persist_directory=self.chroma_dir
+            client=self.supabase_client,
+            table_name="documents"  # Make sure this table exists in your Supabase project
         )
 
         # Create custom prompt template
