@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 🦋 BioScout: Islamabad Biodiversity Explorer
 
 BioScout is an AI-powered biodiversity monitoring application specifically designed for Islamabad's ecosystem, with a focus on the Margalla Hills National Park. The system helps users identify species, record observations, and learn about local biodiversity through an interactive question-answering system.
@@ -17,7 +16,7 @@ BioScout is an AI-powered biodiversity monitoring application specifically desig
 - **Database**: SQLite
 - **AI/ML Components**:
   - Species Identification: iNaturalist API
-  - Q&A System: Groq LLM (llama2-70b-4096)
+  - Q&A System: Groq LLM (llama3-8b-8192)
   - Embeddings: HuggingFace (sentence-transformers)
   - Vector Store: Chroma DB
 
@@ -31,8 +30,8 @@ BioScout is an AI-powered biodiversity monitoring application specifically desig
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd mediscout
+git clone https://github.com/aye-shadow/cust-hackathon.git
+cd cust-hackathon
 ```
 
 2. Install dependencies:
@@ -110,7 +109,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - iNaturalist for species identification API
 - Groq for LLM capabilities
-- Margalla Hills National Park for biodiversity data 
-=======
-# cust-hackathon
->>>>>>> 4175c6bfa1adfe38daa92e1b399285d12ca7291c
+- Margalla Hills National Park for biodiversity data
