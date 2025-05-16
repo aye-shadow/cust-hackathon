@@ -74,7 +74,7 @@ class RAGSystem:
 
         # Initialize Groq LLM with llama-3-8b model
         llm = ChatGroq(
-            model_name="llama3-8b-8192",  # Using llama2-70b as it's more stable
+            model_name="llama3-70b-8192",  # Using llama2-70b as it's more stable
             temperature=0.3,
             max_tokens=2048,
             top_p=0.9
