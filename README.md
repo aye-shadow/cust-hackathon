@@ -65,7 +65,7 @@ uvicorn main:app --reload
 2. Start the frontend application (in a new terminal):
 ```bash
 cd frontend
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
 3. Access the application at `http://localhost:8501`
