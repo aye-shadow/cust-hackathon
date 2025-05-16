@@ -60,7 +60,7 @@ class RAGSystem:
         # Split documents into chunks
         texts = self.text_splitter.split_documents(documents)
 
-        # Use SupabaseVectorStore instead of Chroma
+        # Use SupabaseVectorStore
         self.vector_store = SupabaseVectorStore.from_documents(
             documents=texts,
             embedding=self.embeddings,
