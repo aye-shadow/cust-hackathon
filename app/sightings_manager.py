@@ -106,7 +106,7 @@ class SightingsManager:
                     latitude: float,
                     longitude: float,
                     notes: str,
-                    image_file: Optional[Dict] = None,
+                    image_file: Optional[object] = None,
                     location_description: str = "") -> bool:
         """Save a new sighting to CSV and update knowledge base."""
         try:
@@ -120,18 +120,24 @@ class SightingsManager:
             image_path = ""
             if image_file:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # Sanitize the filename
-                sanitized_filename = self._sanitize_filename(image_file.filename)
+                # Handle both BytesIO and UploadFile-like objects
+                if hasattr(image_file, "filename"):
+                    original_filename = image_file.filename
+                    file_obj = image_file.file
+                elif hasattr(image_file, "name"):
+                    original_filename = image_file.name
+                    file_obj = image_file
+                    file_obj.seek(0)
+                else:
+                    original_filename = "uploaded_image.jpg"
+                    file_obj = image_file
+                sanitized_filename = self._sanitize_filename(original_filename)
                 image_filename = f"{species_type}_{timestamp}_{sanitized_filename}"
-                # Use forward slashes for paths
                 image_path = f"images/{image_filename}"
                 full_image_path = os.path.join(self.images_dir, image_filename)
-                
                 print(f"Saving image to: {full_image_path}")
-                
-                # Save the image
                 with open(full_image_path, "wb") as buffer:
-                    shutil.copyfileobj(image_file.file, buffer)
+                    shutil.copyfileobj(file_obj, buffer)
 
             # Save to CSV
             csv_file = os.path.join(self.sightings_dir, f"{species_type}.csv")
@@ -150,14 +156,14 @@ class SightingsManager:
                     image_path
                 ])
 
-            # Update knowledge base TXT file
-            self._update_knowledge_base(species_type, species_name, common_name,
-                                     latitude, longitude, notes, location_description)
+            # # Update knowledge base TXT file
+            # self._update_knowledge_base(species_type, species_name, common_name,
+            #                          latitude, longitude, notes, location_description)
             
-            # Reinitialize RAG system to include the new sighting
-            print("Updating RAG system with new sighting...")
-            self.rag_system.initialize_knowledge_base()
-            print("RAG system updated successfully")
+            # # Reinitialize RAG system to include the new sighting
+            # print("Updating RAG system with new sighting...")
+            # self.rag_system.initialize_knowledge_base()
+            # print("RAG system updated successfully")
 
             return True
 
