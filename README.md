@@ -1,112 +1,115 @@
-# 🦋 BioScout: Islamabad Biodiversity Explorer
+# BioScout - Biodiversity Tracking Application
 
-BioScout is an AI-powered biodiversity monitoring application specifically designed for Islamabad's ecosystem, with a focus on the Margalla Hills National Park. The system helps users identify species, record observations, and learn about local biodiversity through an interactive question-answering system.
+BioScout is a modern web application for tracking and monitoring local biodiversity. It allows users to submit wildlife observations, view sightings on an interactive map, and get AI-powered answers about local biodiversity.
 
-## 🌟 Features
+## Features
 
-- **Species Identification**: Upload images to identify local flora and fauna using AI
-- **Observation Recording**: Log and track biodiversity sightings with location data
-- **Knowledge Base**: Access information about local species through an AI-powered Q&A system
-- **Interactive Interface**: User-friendly web interface with tabbed navigation
+### 1. Submit Observations
+- Upload images of wildlife sightings
+- Automatic species identification using AI
+- Interactive map for precise location marking
+- Detailed form for recording:
+  - Date of observation
+  - Location coordinates (with visual confirmation)
+  - Location description
+  - Additional notes
+- Real-time feedback and validation
 
-## 🛠️ Technology Stack
+### 2. View Observations
+- Grid and map view options
+- Filter observations by species type:
+  - Birds
+  - Mammals
+  - Plants
+  - Amphibians
+  - Reptiles
+  - Insects
+- Up to 50 recent sightings per species type
+- Interactive markers on map view
+- Detailed observation cards with images
 
-- **Frontend**: Streamlit
-- **Backend**: FastAPI
-- **Database**: SQLite
-- **AI/ML Components**:
-  - Species Identification: iNaturalist API
-  - Q&A System: Groq LLM (llama3-8b-8192)
-  - Embeddings: HuggingFace (sentence-transformers)
-  - Vector Store: Chroma DB
+### 3. Ask Questions
+- AI-powered Q&A about local biodiversity
+- Example questions provided
+- Detailed answers with source citations
+- Focus on local wildlife and conservation
 
-## 📋 Prerequisites
+## Technical Stack
 
-- Python 3.8+
-- Groq API Key
-- Internet connection for API access
+### Frontend
+- React with TypeScript
+- Material-UI (MUI) for components
+- Custom nature-inspired theme
+- Leaflet for interactive maps
+- Responsive design for all devices
 
-## ⚙️ Installation
+### Backend
+- FastAPI
+- Image processing and storage
+- CSV-based data management
+- Species identification AI integration
+
+## Theme Design
+
+The application features a bio-inspired design with:
+- Rich forest greens and honey amber colors
+- Subtle gradients and animations
+- Organic shapes and decorative elements
+- Custom styled components:
+  - Cards with gradient borders
+  - Light green buttons with hover effects
+  - Frosted glass navigation bar
+  - Custom form inputs with shadows
+  - Nature-themed icons
+
+## Setup Instructions
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/aye-shadow/cust-hackathon.git
-cd cust-hackathon
+git clone [repository-url]
+cd bioscout
 ```
 
-2. Install dependencies:
-```bash
-pip install -r backend/requirements.txt
-```
-
-3. Set up environment variables:
-```bash
-# Windows PowerShell
-$env:GROQ_API_KEY = "your-groq-api-key"
-
-# Linux/Mac
-export GROQ_API_KEY="your-groq-api-key"
-```
-
-4. Initialize the database:
+2. Install backend dependencies:
 ```bash
 cd backend
-python init_db.py
+pip install -r requirements.txt
 ```
 
-## 🚀 Running the Application
+3. Install frontend dependencies:
+```bash
+cd frontend/bioscout-ui
+npm install
+```
 
-1. Start the backend server:
+4. Start the backend server:
 ```bash
 cd backend
 uvicorn main:app --reload
 ```
 
-2. Start the frontend application (in a new terminal):
+5. Start the frontend development server:
 ```bash
-cd frontend
-streamlit run app.py
+cd frontend/bioscout-ui
+npm start
 ```
 
-3. Access the application at `http://localhost:8501`
+The application will be available at `http://localhost:3000`
 
-## 💡 Usage
+## Data Management
 
-### Species Identification
-1. Navigate to the "Submit Observation" tab
-2. Upload an image of the species
-3. Enter location details (default is set to Islamabad coordinates)
-4. Click "Identify & Submit"
+- Observations are stored in CSV files by species type
+- Images are stored in `data/sightings/images`
+- Data can be reset using the cleanup process
 
-### Viewing Observations
-1. Go to the "View Observations" tab
-2. Browse through recorded observations
-3. Click on individual observations to view details
+## Contributing
 
-### Asking Questions
-1. Select the "Ask Questions" tab
-2. Type your question about local biodiversity
-3. Click "Ask Question" to get AI-powered responses
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-## 📚 Knowledge Base
-
-The system includes information about:
-- Local bird species
-- Mammal species
-- Plant species
-- Conservation issues
-- Biodiversity hotspots
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit pull requests.
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- iNaturalist for species identification API
-- Groq for LLM capabilities
-- Margalla Hills National Park for biodiversity data
