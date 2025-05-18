@@ -4,7 +4,7 @@ import datetime
 
 
 # === FUNCTION ===
-def identify_species(image_path, lat, lng, token="eyJhbGciOiJIUzUxMiJ9.eyJ1c2VyX2lkIjo5MzE0MTIyLCJleHAiOjE3NDc0ODQyNTZ9.0cYG5VomOSPg9cF5rXTm2Uq-cDZAkvUuaVMXJPFBmI0vdD7Iga6ODZ3Z0c5xXJTIEh4rjAHBaE8Ra0looR-AkA"):
+def identify_species(image_path, lat, lng, token="eyJhbGciOiJIUzUxMiJ9.eyJ1c2VyX2lkIjo5MzE0MTIyLCJleHAiOjE3NDc2NDA0MjZ9._fpBi77Tg9NUs9wKO1MPO3z00DuIoxZz_0dzO-EXe4YW1yS2tpLa0zzdOzBE_IGx_KQROePe5eA1R0Z7q1t7WQ"):
     url = "https://api.inaturalist.org/v1/computervision/score_image"
     
     # Prepare request

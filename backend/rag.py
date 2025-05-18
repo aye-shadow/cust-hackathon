@@ -1,4 +1,5 @@
 import os
+import shutil
 from typing import List, Dict
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma
@@ -7,6 +8,7 @@ from langchain.document_loaders import TextLoader
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain_groq import ChatGroq
+import time
 
 class RAGSystem:
     def __init__(self, knowledge_dir: str = None):
@@ -31,62 +33,97 @@ class RAGSystem:
         self.qa_chain = None
         self.initialize_knowledge_base()
 
+    def safe_remove_dir(self, path: str, max_retries: int = 5, delay: float = 1.0):
+        """Safely remove a directory with retries on Windows."""
+        for i in range(max_retries):
+            try:
+                if os.path.exists(path):
+                    shutil.rmtree(path)
+                return True
+            except PermissionError as e:
+                if i == max_retries - 1:  # Last attempt
+                    print(f"Warning: Could not remove directory {path} after {max_retries} attempts: {e}")
+                    return False
+                print(f"Attempt {i + 1}: Directory in use, waiting {delay} seconds...")
+                time.sleep(delay)
+        return False
+
     def initialize_knowledge_base(self):
         """Initialize the knowledge base from text files."""
-        documents = []
-        
-        # Load all text files from the knowledge directory
-        if os.path.exists(self.knowledge_dir):
-            for filename in os.listdir(self.knowledge_dir):
-                if filename.endswith(".txt"):
-                    file_path = os.path.join(self.knowledge_dir, filename)
-                    loader = TextLoader(file_path)
-                    documents.extend(loader.load())
-        else:
-            raise ValueError(f"Knowledge directory not found: {self.knowledge_dir}")
+        try:
+            documents = []
+            
+            # Load all text files from the knowledge directory
+            if os.path.exists(self.knowledge_dir):
+                for filename in os.listdir(self.knowledge_dir):
+                    if filename.endswith(".txt"):
+                        file_path = os.path.join(self.knowledge_dir, filename)
+                        print(f"Loading knowledge base file: {filename}")  # Debug print
+                        loader = TextLoader(file_path)
+                        documents.extend(loader.load())
+            else:
+                raise ValueError(f"Knowledge directory not found: {self.knowledge_dir}")
 
-        if not documents:
-            raise ValueError(f"No text files found in {self.knowledge_dir}")
+            if not documents:
+                raise ValueError(f"No text files found in {self.knowledge_dir}")
 
-        # Split documents into chunks
-        texts = self.text_splitter.split_documents(documents)
+            print(f"Loaded {len(documents)} documents")  # Debug print
 
-        # Create vector store
-        self.vector_store = Chroma.from_documents(
-            documents=texts,
-            embedding=self.embeddings,
-            persist_directory=self.chroma_dir
-        )
+            # Split documents into chunks
+            texts = self.text_splitter.split_documents(documents)
+            print(f"Split into {len(texts)} text chunks")  # Debug print
 
-        # Create custom prompt template
-        prompt_template = """You are an expert on the biodiversity of Islamabad and Margalla Hills National Park.
-        Use the following pieces of context to answer the question. If you don't know the answer, just say that 
-        you don't know, don't try to make up an answer. Keep the answer concise and relevant to Islamabad's biodiversity.
+            # Try to safely remove the existing vector store
+            if os.path.exists(self.chroma_dir):
+                if not self.safe_remove_dir(self.chroma_dir):
+                    print("Warning: Could not remove existing vector store, will try to update it instead")
+                else:
+                    os.makedirs(self.chroma_dir, exist_ok=True)
 
-        Context: {context}
+            # Create or update vector store
+            self.vector_store = Chroma.from_documents(
+                documents=texts,
+                embedding=self.embeddings,
+                persist_directory=self.chroma_dir
+            )
 
-        Question: {question}
-        Answer:"""
+            # Create custom prompt template
+            prompt_template = """You are an expert on the biodiversity of Islamabad and Margalla Hills National Park.
+            Use the following pieces of context to answer the question. If you don't know the answer, just say that 
+            you don't know, don't try to make up an answer. Keep the answer concise and relevant to Islamabad's biodiversity.
 
-        PROMPT = PromptTemplate(
-            template=prompt_template, input_variables=["context", "question"]
-        )
+            Context: {context}
 
-        # Initialize Groq LLM with llama-3-8b model
-        llm = ChatGroq(
-            model_name="llama3-8b-8192",  # Using llama2-70b as it's more stable
-            temperature=0.3,
-            max_tokens=2048,
-            top_p=0.9
-        )
+            Question: {question}
+            Answer:"""
 
-        # Initialize QA chain
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=self.vector_store.as_retriever(search_kwargs={"k": 3}),
-            chain_type_kwargs={"prompt": PROMPT}
-        )
+            PROMPT = PromptTemplate(
+                template=prompt_template, input_variables=["context", "question"]
+            )
+
+            # Initialize Groq LLM with llama-3-8b model
+            llm = ChatGroq(
+                model_name="llama3-70b-8192",  # Using llama2-70b as it's more stable
+                temperature=0.3,
+                max_tokens=2048,
+                top_p=0.9
+            )
+
+            # Initialize QA chain
+            self.qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=self.vector_store.as_retriever(search_kwargs={"k": 3}),
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+            
+            print("Knowledge base initialized successfully")  # Debug print
+            
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Error initializing knowledge base: {str(e)}\nTrace:\n{error_trace}")
+            raise
 
     def ask_question(self, question: str) -> Dict:
         """Ask a question and get an answer with relevant sources."""
