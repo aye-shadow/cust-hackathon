@@ -11,5 +11,7 @@ class Observation(Base):
     date_observed = Column(Date)
     latitude = Column(Float)
     longitude = Column(Float)
-    image_url = Column(String)
+    location_description = Column(String)
     notes = Column(String)
+    image_url = Column(String)
+    species_type = Column(String)  # 'birds', 'mammals', 'plants', etc.

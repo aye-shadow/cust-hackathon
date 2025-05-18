@@ -1,22 +1,19 @@
 import os
-import csv
-from datetime import datetime
-from typing import Dict, Optional
 import shutil
+from datetime import datetime
+from typing import Dict, Optional, List
+from fastapi import UploadFile
 from langchain_groq import ChatGroq
-import re
-from rag import RAGSystem
+from db import SessionLocal
+from models import Observation
 
 class SightingsManager:
     def __init__(self):
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.sightings_dir = os.path.join(self.base_dir, "data", "sightings")
-        self.images_dir = os.path.join(self.sightings_dir, "images")
-        self.knowledge_dir = os.path.join(self.base_dir, "data")
+        self.base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sightings")
+        self.images_dir = os.path.join(self.base_dir, "images")
         
-        # Initialize Groq
+        # Initialize Groq for species classification
         os.environ["GROQ_API_KEY"] = "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"
-        groq_api_key = os.getenv("GROQ_API_KEY")
         
         self.llm = ChatGroq(
             model_name="llama3-8b-8192",
@@ -24,46 +21,8 @@ class SightingsManager:
             max_tokens=100
         )
         
-        # Initialize RAG system
-        self.rag_system = RAGSystem()
-        
-        # Create directories if they don't exist
-        os.makedirs(self.sightings_dir, exist_ok=True)
+        # Create images directory if it doesn't exist
         os.makedirs(self.images_dir, exist_ok=True)
-        
-        # Initialize CSV files if they don't exist
-        self._init_csv("birds.csv")
-        self._init_csv("mammals.csv")
-        self._init_csv("plants.csv")
-        self._init_csv("amphibians.csv")
-        self._init_csv("reptiles.csv")
-        self._init_csv("insects.csv")
-        self._init_csv("other.csv")
-
-    def _sanitize_filename(self, filename: str) -> str:
-        """Sanitize filename to remove spaces and special characters."""
-        # Get the name and extension
-        name, ext = os.path.splitext(filename)
-        
-        # Replace spaces and special characters with underscores
-        name = re.sub(r'[^\w\-_.]', '_', name)
-        name = re.sub(r'\s+', '_', name)
-        
-        # Remove multiple consecutive underscores
-        name = re.sub(r'_+', '_', name)
-        
-        # Combine name and extension
-        return f"{name}{ext.lower()}"
-
-    def _init_csv(self, filename: str):
-        """Initialize CSV file with headers if it doesn't exist."""
-        filepath = os.path.join(self.sightings_dir, filename)
-        if not os.path.exists(filepath):
-            headers = ["date", "species_name", "common_name", "latitude", 
-                      "longitude", "location_description", "notes", "image_path"]
-            with open(filepath, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
 
     async def _determine_species_type(self, species_name: str, common_name: str) -> str:
         """Use Groq to determine if the species is a bird, mammal, plant, amphibian, reptile, insect, or other."""
@@ -85,12 +44,10 @@ class SightingsManager:
         Respond with ONLY ONE of these exact words: birds, mammals, plants, amphibians, reptiles, insects, other"""
 
         try:
-            # Pass the prompt directly as a string
             response = await self.llm.ainvoke(prompt)
             classification = response.content.lower().strip()
             print(f"Groq classified {species_name} as: {classification}")
 
-            # Ensure we get a valid category
             valid_categories = {"birds", "mammals", "plants", "amphibians", "reptiles", "insects", "other"}
             if classification not in valid_categories:
                 print(f"Invalid classification from Groq: {classification}, defaulting to 'other'")
@@ -101,97 +58,102 @@ class SightingsManager:
             print(f"Error in Groq classification: {str(e)}, defaulting to 'other'")
             return "other"
 
-    async def save_sighting(self, 
-                    species_name: str,
-                    common_name: str,
-                    latitude: float,
-                    longitude: float,
-                    notes: str,
-                    image_file: Optional[Dict] = None,
-                    location_description: str = "") -> bool:
-        """Save a new sighting to CSV and update knowledge base."""
+    async def save_sighting(
+        self,
+        species_name: str,
+        common_name: str,
+        latitude: float,
+        longitude: float,
+        location_description: str,
+        notes: str,
+        image_file: UploadFile,
+        date_observed: datetime
+    ) -> bool:
+        """Save a new sighting with image and metadata to the database."""
         try:
-            print(f"Saving sighting for: {species_name}")
+            # Determine species type
+            species_type = await self._determine_species_type(species_name.lower(), common_name.lower())
             
-            # Determine species type using Groq
-            species_type = await self._determine_species_type(species_name, common_name)
-            print(f"Species type determined as: {species_type}")
+            # Save image
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_filename = f"{species_type}_{timestamp}.jpg"
+            image_path = os.path.join(self.images_dir, image_filename)
             
-            # Save image if provided
-            image_path = ""
-            if image_file:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                # Sanitize the filename
-                sanitized_filename = self._sanitize_filename(image_file.filename)
-                image_filename = f"{species_type}_{timestamp}_{sanitized_filename}"
-                # Use forward slashes for paths
-                image_path = f"images/{image_filename}"
-                full_image_path = os.path.join(self.images_dir, image_filename)
+            with open(image_path, "wb") as buffer:
+                shutil.copyfileobj(image_file.file, buffer)
+            
+            # Save to database
+            session = SessionLocal()
+            try:
+                observation = Observation(
+                    species_name=species_name,
+                    common_name=common_name,
+                    date_observed=date_observed,
+                    latitude=latitude,
+                    longitude=longitude,
+                    location_description=location_description,
+                    notes=notes,
+                    image_url=f"/static/images/{image_filename}",
+                    species_type=species_type
+                )
+                session.add(observation)
+                session.commit()
+                return True
+            finally:
+                session.close()
                 
-                print(f"Saving image to: {full_image_path}")
-                
-                # Save the image
-                with open(full_image_path, "wb") as buffer:
-                    shutil.copyfileobj(image_file.file, buffer)
-
-            # Save to CSV
-            csv_file = os.path.join(self.sightings_dir, f"{species_type}.csv")
-            print(f"Saving to CSV: {csv_file}")
-            
-            with open(csv_file, 'a', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    species_name,
-                    common_name,
-                    latitude,
-                    longitude,
-                    location_description,
-                    notes,
-                    image_path
-                ])
-
-            # Update knowledge base TXT file
-            self._update_knowledge_base(species_type, species_name, common_name,
-                                     latitude, longitude, notes, location_description)
-            
-            # Reinitialize RAG system to include the new sighting
-            print("Updating RAG system with new sighting...")
-            self.rag_system.initialize_knowledge_base()
-            print("RAG system updated successfully")
-
-            return True
-
         except Exception as e:
             print(f"Error saving sighting: {str(e)}")
             return False
 
-    def _update_knowledge_base(self, species_type: str, species_name: str,
-                             common_name: str, latitude: float, longitude: float,
-                             notes: str, location_description: str):
-        """Append new sighting information to the knowledge base TXT file."""
-        if species_type in ["birds", "mammals", "plants", "amphibians", "reptiles", "insects", "other"]:
-            txt_file = os.path.join(self.knowledge_dir, f"margalla_{species_type}.txt")
-            
-            if os.path.exists(txt_file):
-                with open(txt_file, 'a') as f:
-                    f.write(f"\n\nRecent Sighting ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}):")
-                    f.write(f"\n- {species_name}")
-                    if common_name:
-                        f.write(f" ({common_name})")
-                    f.write(f"\n  Location: {location_description if location_description else f'({latitude}, {longitude})'}")
-                    if notes:
-                        f.write(f"\n  Notes: {notes}")
-
-    def get_recent_sightings(self, species_type: str, limit: int = 5) -> list:
-        """Get recent sightings for a specific species type."""
-        csv_file = os.path.join(self.sightings_dir, f"{species_type}.csv")
-        if not os.path.exists(csv_file):
+    def get_recent_sightings(self, species_type: str, limit: int = 5) -> List[Dict]:
+        """Get recent sightings for a specific species type from the database."""
+        try:
+            session = SessionLocal()
+            try:
+                sightings = (
+                    session.query(Observation)
+                    .filter(Observation.species_type == species_type)
+                    .order_by(Observation.date_observed.desc())
+                    .limit(limit)
+                    .all()
+                )
+                
+                return [
+                    {
+                        "species_name": s.species_name,
+                        "common_name": s.common_name,
+                        "latitude": s.latitude,
+                        "longitude": s.longitude,
+                        "location_description": s.location_description,
+                        "notes": s.notes,
+                        "image_url": s.image_url,
+                        "date": s.date_observed.isoformat(),
+                        "type": s.species_type
+                    }
+                    for s in sightings
+                ]
+            finally:
+                session.close()
+        except Exception as e:
+            print(f"Error getting sightings: {str(e)}")
             return []
 
-        sightings = []
-        with open(csv_file, 'r') as f:
-            reader = csv.DictReader(f)
-            sightings = list(reader)[-limit:]  # Get last 'limit' entries
-
-        return sightings 
+    def cleanup(self) -> None:
+        """Remove all sightings data (images and database records)."""
+        try:
+            # Remove all files in images directory
+            for filename in os.listdir(self.images_dir):
+                file_path = os.path.join(self.images_dir, filename)
+                if os.path.isfile(file_path):
+                    os.unlink(file_path)
+            
+            # Remove all database records
+            session = SessionLocal()
+            try:
+                session.query(Observation).delete()
+                session.commit()
+            finally:
+                session.close()
+        except Exception as e:
+            print(f"Error during cleanup: {str(e)}") 

@@ -34,14 +34,13 @@ const ViewObservations: React.FC = () => {
   useEffect(() => {
     const fetchSightings = async () => {
       try {
-        const allSightings: Sighting[] = [];
-        const types = ['birds', 'mammals', 'plants', 'amphibians', 'reptiles', 'insects'];
-        
-        for (const type of types) {
-          const response = await axios.get(`http://localhost:8000/recent-sightings/${type}?limit=50`);
-          const typeSightings = response.data.map((s: Sighting) => ({ ...s, type }));
-          allSightings.push(...typeSightings);
-        }
+        // Fetch only from observations endpoint
+        const response = await axios.get('http://localhost:8000/observations/');
+        const allSightings = response.data.map((obs: any) => ({
+          ...obs,
+          timestamp: obs.date || new Date().toISOString(),
+          image_path: obs.image_url
+        }));
         
         setSightings(allSightings);
       } catch (error) {
@@ -55,18 +54,18 @@ const ViewObservations: React.FC = () => {
   const filteredSightings = sightings
     .filter(s => {
       if (selectedTypes.includes('all')) return true;
-      return selectedTypes.includes(s.type || '');
+      return s.type && selectedTypes.includes(s.type);
     })
     .filter(s => 
-      s.species_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (s.common_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+      (s.species_name && s.species_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (s.common_name && s.common_name.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     .sort((a, b) => {
       switch (sortBy) {
         case 'newest':
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
+          return new Date(b.timestamp || '').getTime() - new Date(a.timestamp || '').getTime();
         case 'oldest':
-          return new Date(a.date).getTime() - new Date(b.date).getTime();
+          return new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime();
         case 'nameAZ':
           return a.species_name.localeCompare(b.species_name);
         case 'nameZA':
@@ -159,44 +158,43 @@ const ViewObservations: React.FC = () => {
       </Card>
 
       {viewType === 'map' ? (
-        <Card>
-          <CardContent>
-            <Box sx={{ height: 600 }}>
-              <MapContainer
-                center={DEFAULT_CENTER}
-                zoom={11}
-                style={{ height: '100%', width: '100%' }}
-                scrollWheelZoom={false}
-              >
-                <TileLayer
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                />
-                {filteredSightings.map((sighting, index) => (
-                  sighting.latitude && sighting.longitude ? (
-                    <Marker
-                      key={index}
-                      position={[parseFloat(sighting.latitude), parseFloat(sighting.longitude)] as LatLngTuple}
-                    >
-                      <Popup>
-                        <Typography variant="subtitle1">{sighting.species_name}</Typography>
-                        <Typography variant="body2">{sighting.common_name}</Typography>
-                        <Typography variant="body2">Date: {sighting.date}</Typography>
-                        {sighting.location_description && (
-                          <Typography variant="body2">
-                            Location: {sighting.location_description}
-                          </Typography>
-                        )}
-                      </Popup>
-                    </Marker>
-                  ) : null
-                ))}
-              </MapContainer>
-            </Box>
+        <Card sx={{ height: 'calc(100vh - 300px)', mt: 2 }}>
+          <CardContent sx={{ height: '100%', p: '12px !important' }}>
+            <MapContainer
+              center={DEFAULT_CENTER}
+              zoom={11}
+              style={{ height: '100%', width: '100%' }}
+            >
+              <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
+              {filteredSightings.map((sighting, index) => (
+                <Marker
+                  key={index}
+                  position={[Number(sighting.latitude), Number(sighting.longitude)] as LatLngTuple}
+                >
+                  <Popup>
+                    <Typography variant="subtitle1">{sighting.species_name}</Typography>
+                    {sighting.common_name && (
+                      <Typography variant="body2">{sighting.common_name}</Typography>
+                    )}
+                    <Typography variant="body2">
+                      Date: {new Date(sighting.timestamp || '').toLocaleDateString()}
+                    </Typography>
+                    {sighting.location_description && (
+                      <Typography variant="body2">
+                        Location: {sighting.location_description}
+                      </Typography>
+                    )}
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
           </CardContent>
         </Card>
       ) : (
-        <Grid container spacing={3}>
+        <Grid container spacing={3} sx={{ mt: 1 }}>
           {filteredSightings.map((sighting, index) => (
             <Grid item xs={12} sm={6} md={4} key={index}>
               <Card>
@@ -205,12 +203,12 @@ const ViewObservations: React.FC = () => {
                     {sighting.species_name}
                   </Typography>
                   {sighting.common_name && (
-                    <Typography variant="subtitle1" color="textSecondary" gutterBottom>
+                    <Typography variant="subtitle1" gutterBottom>
                       {sighting.common_name}
                     </Typography>
                   )}
                   <Typography variant="body2" gutterBottom>
-                    Date: {sighting.date}
+                    Date: {new Date(sighting.timestamp || '').toLocaleDateString()}
                   </Typography>
                   {sighting.location_description && (
                     <Typography variant="body2" gutterBottom>
@@ -222,20 +220,20 @@ const ViewObservations: React.FC = () => {
                       Notes: {sighting.notes}
                     </Typography>
                   )}
-                  {sighting.image_path && (
+                  {(sighting.image_url || sighting.image_path) && (
                     <Box
                       component="img"
-                      src={`http://localhost:8000/static/${sighting.image_path}`}
+                      src={sighting.image_url || sighting.image_path}
                       alt={sighting.species_name}
                       sx={{
                         width: '100%',
                         height: 200,
                         objectFit: 'cover',
                         borderRadius: 1,
-                        mt: 2,
+                        mt: 2
                       }}
                       onError={(e) => {
-                        console.error('Image failed to load:', sighting.image_path);
+                        console.error('Image failed to load:', sighting.image_url || sighting.image_path);
                         (e.target as HTMLImageElement).style.display = 'none';
                       }}
                     />

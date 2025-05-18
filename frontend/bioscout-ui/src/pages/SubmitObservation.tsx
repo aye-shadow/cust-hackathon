@@ -77,8 +77,8 @@ const SubmitObservation: React.FC = () => {
         // Submit observation
         const obsFormData = new FormData();
         obsFormData.append('image', image);
-        obsFormData.append('species_name', topSuggestion.name);
-        obsFormData.append('common_name', topSuggestion.rank);
+        obsFormData.append('species_name', topSuggestion.scientific_name);
+        obsFormData.append('common_name', topSuggestion.common_name);
         obsFormData.append('date_observed', date);
         obsFormData.append('latitude', position[0].toString());
         obsFormData.append('longitude', position[1].toString());
@@ -254,7 +254,7 @@ const SubmitObservation: React.FC = () => {
                     </Typography>
                     {suggestions.map((s, i) => (
                       <Typography key={i} variant="body1">
-                        {s.name} ({s.rank}) - {s.confidence.toFixed(2)}% confidence
+                        {s.scientific_name} ({s.common_name}) - {s.confidence.toFixed(2)}% confidence
                       </Typography>
                     ))}
                   </Box>

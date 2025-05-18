@@ -2,22 +2,25 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from identify import identify_species
-from db import SessionLocal
+from db import SessionLocal, init_db
 from models import Observation
-from rag import RAGSystem
 from sightings_manager import SightingsManager
+from rag import RAGSystem
 import shutil
 import os
 from datetime import date, datetime
 
 app = FastAPI()
 
+# Initialize the database
+init_db()
+
 # Create temp directory if it doesn't exist
 os.makedirs("temp", exist_ok=True)
 
-# Initialize RAG system and SightingsManager
-rag_system = RAGSystem()
+# Initialize SightingsManager and RAGSystem
 sightings_manager = SightingsManager()
+rag_system = RAGSystem()
 
 # Mount static files directory
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sightings")
@@ -39,38 +42,17 @@ async def identify(image: UploadFile = File(...), lat: float = Form(...), lng: f
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(image.file, buffer)
 
-        suggestions = identify_species(file_path, lat, lng)
+        suggestions = await identify_species(file_path, lat, lng)
         return suggestions
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Clean up: ensure file handle is closed and file is deleted
         try:
             image.file.close()
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
         except Exception as e:
             print(f"Warning: Could not clean up file {file_path}: {str(e)}")
-
-@app.post("/ask/")
-async def ask_question(question: str = Form(...)):
-    """Endpoint for asking questions about local biodiversity."""
-    try:
-        print(f"Received question: {question}")  # Debug print
-        result = rag_system.ask_question(question)
-        print(f"Got result: {result}")  # Debug print
-        
-        if isinstance(result, dict) and "error" in result:
-            error_msg = result["error"]
-            print(f"Error from RAG system: {error_msg}")  # Debug print
-            raise HTTPException(status_code=500, detail=error_msg)
-        return result
-    except Exception as e:
-        import traceback
-        error_trace = traceback.format_exc()
-        error_msg = f"Error processing question: {str(e)}\nTrace:\n{error_trace}"
-        print(error_msg)  # Debug print
-        raise HTTPException(status_code=500, detail=error_msg)
 
 @app.post("/observations/")
 async def add_observation(
@@ -79,63 +61,92 @@ async def add_observation(
     date_observed: date = Form(...),
     latitude: float = Form(...),
     longitude: float = Form(...),
+    location_description: str = Form(""),
     notes: str = Form(""),
     image: UploadFile = File(None)
 ):
     try:
-        # Save to database
-        session = SessionLocal()
-        try:
-            obs = Observation(
-                species_name=species_name,
-                common_name=common_name,
-                date_observed=date_observed,
-                latitude=latitude,
-                longitude=longitude,
-                notes=notes
-            )
-            session.add(obs)
-            session.commit()
-        finally:
-            session.close()
-
-        # Save to sightings system
         if image:
             result = await sightings_manager.save_sighting(
                 species_name=species_name,
                 common_name=common_name,
                 latitude=latitude,
                 longitude=longitude,
+                location_description=location_description,
                 notes=notes,
                 image_file=image,
-                location_description=f"Coordinates: {latitude}, {longitude}"
+                date_observed=date_observed
             )
             if not result:
                 raise HTTPException(status_code=500, detail="Failed to save sighting")
+        else:
+            # Save observation without image
+            session = SessionLocal()
+            try:
+                species_type = await sightings_manager._determine_species_type(species_name.lower(), common_name.lower())
+                obs = Observation(
+                    species_name=species_name,
+                    common_name=common_name,
+                    date_observed=date_observed,
+                    latitude=latitude,
+                    longitude=longitude,
+                    location_description=location_description,
+                    notes=notes,
+                    species_type=species_type
+                )
+                session.add(obs)
+                session.commit()
+            finally:
+                session.close()
 
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/observations/")
-def get_observations():
+async def get_observations():
+    """Get all observations from the database."""
     session = SessionLocal()
     try:
-        data = session.query(Observation).all()
-        return data
+        observations = session.query(Observation).order_by(Observation.date_observed.desc()).all()
+        return [
+            {
+                "species_name": obs.species_name,
+                "common_name": obs.common_name,
+                "latitude": obs.latitude,
+                "longitude": obs.longitude,
+                "location_description": obs.location_description,
+                "notes": obs.notes,
+                "image_url": obs.image_url,
+                "date": obs.date_observed.isoformat(),
+                "type": obs.species_type,
+                "timestamp": obs.date_observed.isoformat()
+            }
+            for obs in observations
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         session.close()
 
 @app.get("/recent-sightings/{species_type}")
-def get_recent_sightings(species_type: str, limit: int = 5):
+async def get_recent_sightings(species_type: str, limit: int = 5):
     """Get recent sightings for birds, mammals, plants, amphibians, reptiles, insects, or other."""
     try:
         if species_type not in ["birds", "mammals", "plants", "amphibians", "reptiles", "insects", "other"]:
             raise HTTPException(status_code=400, detail="Invalid species type")
         
-        sightings = sightings_manager.get_recent_sightings(species_type, limit)
-        return sightings
+        return sightings_manager.get_recent_sightings(species_type, limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ask/")
+async def ask_question(question: str = Form(...)):
+    """Ask a question about local biodiversity."""
+    try:
+        result = rag_system.ask_question(question)
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
